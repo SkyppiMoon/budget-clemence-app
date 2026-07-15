@@ -16,6 +16,7 @@
   --alert-pale:#F5E1DA;
   --gold:#C79A56;
   --radius:18px;
+  --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
@@ -43,7 +44,10 @@ h1,h2,h3,.display{
 
 /* ---------- HEADER / MONTH SWITCHER ---------- */
 .topbar{
-  padding:22px 20px 0;
+  padding:
+    calc(var(--safe-top) + 22px)
+    20px
+    0;
 }
 .brand{
   font-size:13px;
