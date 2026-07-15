@@ -20,7 +20,11 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;}
+html,body{
+  margin:0;
+  padding:0;
+  overflow-x:hidden;
+}
 body{
   background:var(--cream);
   color:var(--plum);
@@ -267,9 +271,18 @@ h1,h2,h3,.display{
 }
 .overlay.open{ display:flex; }
 .sheet{
-  background:var(--cream); width:100%; max-width:480px;
-  border-radius:22px 22px 0 0; padding:20px 20px calc(20px + var(--safe-bottom));
-  max-height:88vh; overflow-y:auto;
+  background:var(--cream); 
+  width:100%; 
+  max-width:480px;
+  border-radius:22px 22px 0 0; 
+  padding:20px 20px calc(20px + var(--safe-bottom));
+  max-height:88vh;
+
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+
   animation:slideUp .25s ease;
 }
 @keyframes slideUp{ from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;} }
