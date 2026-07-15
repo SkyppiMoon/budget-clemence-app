@@ -45,9 +45,9 @@ h1,h2,h3,.display{
 /* ---------- HEADER / MONTH SWITCHER ---------- */
 .topbar{
   padding:
-    calc(var(--safe-top) + 22px)
-    20px
-    0;
+      calc(var(--safe-top) + 28px)
+      20px
+      12px;
 }
 .brand{
   font-size:13px;
