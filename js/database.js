@@ -252,3 +252,120 @@ export async function deleteTransaction(
     throw new Error(error.message);
   }
 }
+export async function loadMonthlyCategoryBudgets(month) {
+  const budgetMonth = `${month}-01`;
+
+  const { data, error } = await supabase
+    .from('category_monthly_budgets')
+    .select('*')
+    .eq('budget_month', budgetMonth);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? [];
+}
+export async function ensureMonthlyCategoryBudgets(
+  month,
+  categories
+) {
+  const userId = await getCurrentUserId();
+  const budgetMonth = `${month}-01`;
+
+  const existingRows =
+    await loadMonthlyCategoryBudgets(month);
+
+  const existingCategoryIds =
+    new Set(
+      existingRows.map(row => row.category_id)
+    );
+
+  const missingRows = categories
+    .filter(
+      category =>
+        !existingCategoryIds.has(category.id)
+    )
+    .map(category => ({
+      user_id: userId,
+      category_id: category.id,
+      budget_month: budgetMonth,
+      budget: Number(category.budget) || 0,
+      is_enabled: true
+    }));
+
+  if (missingRows.length === 0) {
+    return existingRows;
+  }
+
+  const { data: createdRows, error } =
+    await supabase
+      .from('category_monthly_budgets')
+      .insert(missingRows)
+      .select();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return [
+    ...existingRows,
+    ...(createdRows ?? [])
+  ];
+}
+export async function updateMonthlyCategoryBudget(
+  monthlyBudgetId,
+  changes
+) {
+  const updatePayload = {
+    updated_at: new Date().toISOString()
+  };
+
+  if (changes.budget !== undefined) {
+    updatePayload.budget = changes.budget;
+  }
+
+  if (changes.isEnabled !== undefined) {
+    updatePayload.is_enabled =
+      changes.isEnabled;
+  }
+
+  const { data, error } = await supabase
+    .from('category_monthly_budgets')
+    .update(updatePayload)
+    .eq('id', monthlyBudgetId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+export async function createMonthlyCategoryBudget(
+  categoryId,
+  month,
+  budget,
+  isEnabled = true
+) {
+  const userId = await getCurrentUserId();
+
+  const { data, error } = await supabase
+    .from('category_monthly_budgets')
+    .insert({
+      user_id: userId,
+      category_id: categoryId,
+      budget_month: `${month}-01`,
+      budget,
+      is_enabled: isEnabled
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
