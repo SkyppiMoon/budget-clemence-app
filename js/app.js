@@ -2,12 +2,20 @@ import {
   loadIncomes,
   loadCategories,
   loadTransactions,
+
+  loadMonthlyCategoryBudgets,
+  ensureMonthlyCategoryBudgets,
+  updateMonthlyCategoryBudget,
+  createMonthlyCategoryBudget,
+
   createIncome,
   updateIncome,
   deleteIncome,
+
   createCategory,
   updateCategory,
   deleteCategory,
+
   createTransaction,
   updateTransaction,
   deleteTransaction
@@ -91,17 +99,33 @@ import {
     };
   }
 
-  function mapCategory(row) {
-    return {
-      id: row.id,
-      code: row.code,
-      name: row.name,
-      type: row.type,
-      budget: Number(row.budget),
-      isBill: Boolean(row.is_bill),
-      dueDay: row.due_day
-    };
-  }
+function mapCategory(row, monthlyRow = null) {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    type: row.type,
+
+    defaultBudget:
+      Number(row.budget) || 0,
+
+    budget:
+      monthlyRow
+        ? Number(monthlyRow.budget)
+        : Number(row.budget) || 0,
+
+    isEnabled:
+      monthlyRow
+        ? Boolean(monthlyRow.is_enabled)
+        : true,
+
+    monthlyBudgetId:
+      monthlyRow?.id || null,
+
+    isBill: Boolean(row.is_bill),
+    dueDay: row.due_day
+  };
+}
 
   function mapTransaction(row) {
     return {
@@ -118,38 +142,99 @@ import {
   let data = null;
 
   async function load() {
-    const initialData = defaultData();
-    const storedMonth = localStorage.getItem(MONTH_STORAGE_KEY);
+  const initialData = defaultData();
 
-    data = {
-      ...initialData,
-      currentMonth: storedMonth || initialData.currentMonth
-    };
+  const storedMonth =
+    localStorage.getItem(MONTH_STORAGE_KEY);
 
-    const [incomes, categories, transactions] = await Promise.all([
-      loadIncomes(),
-      loadCategories(),
-      loadTransactions(data.currentMonth)
-    ]);
+  data = {
+    ...initialData,
+    currentMonth:
+      storedMonth || initialData.currentMonth
+  };
 
-    data.income = incomes.map(mapIncome);
-    data.categories = categories.map(mapCategory);
-    data.transactions = transactions.map(mapTransaction);
+  const [
+    incomes,
+    categoryRows,
+    transactions
+  ] = await Promise.all([
+    loadIncomes(),
+    loadCategories(),
+    loadTransactions(data.currentMonth)
+  ]);
 
-    render();
-  }
-
-  async function reloadCurrentMonth() {
-    const transactions = await loadTransactions(data.currentMonth);
-    data.transactions = transactions.map(mapTransaction);
-
-    localStorage.setItem(
-      MONTH_STORAGE_KEY,
-      data.currentMonth
+  const monthlyRows =
+    await ensureMonthlyCategoryBudgets(
+      data.currentMonth,
+      categoryRows
     );
 
-    render();
-  }
+  const monthlyByCategoryId =
+    new Map(
+      monthlyRows.map(row => [
+        row.category_id,
+        row
+      ])
+    );
+
+  data.income =
+    incomes.map(mapIncome);
+
+  data.categories =
+    categoryRows.map(category =>
+      mapCategory(
+        category,
+        monthlyByCategoryId.get(category.id)
+      )
+    );
+
+  data.transactions =
+    transactions.map(mapTransaction);
+
+  render();
+}
+
+async function reloadCurrentMonth() {
+  const [
+    categoryRows,
+    transactions
+  ] = await Promise.all([
+    loadCategories(),
+    loadTransactions(data.currentMonth)
+  ]);
+
+  const monthlyRows =
+    await ensureMonthlyCategoryBudgets(
+      data.currentMonth,
+      categoryRows
+    );
+
+  const monthlyByCategoryId =
+    new Map(
+      monthlyRows.map(row => [
+        row.category_id,
+        row
+      ])
+    );
+
+  data.categories =
+    categoryRows.map(category =>
+      mapCategory(
+        category,
+        monthlyByCategoryId.get(category.id)
+      )
+    );
+
+  data.transactions =
+    transactions.map(mapTransaction);
+
+  localStorage.setItem(
+    MONTH_STORAGE_KEY,
+    data.currentMonth
+  );
+
+  render();
+}
 
   // ---------- helpers de mois ----------
   function monthLabel(m){
@@ -172,15 +257,38 @@ import {
   function totalIncome(){
     return data.income.reduce((s,i)=>s+Number(i.amount),0);
   }
-  function totalsByType(){
-    const res = {oblig:{budget:0,actual:0}, besoins:{budget:0,actual:0}, envies:{budget:0,actual:0}};
-    data.categories.forEach(c=>{
-      if(!res[c.type]) return;
-      res[c.type].budget += Number(c.budget)||0;
-      res[c.type].actual += spentByCategory(c.id);
-    });
-    return res;
-  }
+  function totalsByType() {
+  const result = {
+    oblig: {
+      budget: 0,
+      actual: 0
+    },
+    besoins: {
+      budget: 0,
+      actual: 0
+    },
+    envies: {
+      budget: 0,
+      actual: 0
+    }
+  };
+
+  data.categories.forEach(category => {
+    if (!result[category.type]) {
+      return;
+    }
+
+    if (category.isEnabled) {
+      result[category.type].budget +=
+        Number(category.budget) || 0;
+    }
+
+    result[category.type].actual +=
+      spentByCategory(category.id);
+  });
+
+  return result;
+}
 
   // ---------- rendu ----------
   function render(){
@@ -218,7 +326,17 @@ import {
     const groups = [['oblig','Fixes','oblig'],['besoins','Besoins','besoins'],['envies','Envies','envies']];
     let html = '';
     groups.forEach(([type,label,cls])=>{
-      const cats = data.categories.filter(c=>c.type===type);
+      const cats =
+  data.categories.filter(category => {
+    if (category.type !== type) {
+      return false;
+    }
+
+    const actual =
+      spentByCategory(category.id);
+
+    return category.isEnabled || actual !== 0;
+  });
       if(cats.length===0) return;
       html += `<div class="type-heading"><span class="dot ${cls}"></span><span>${label}</span></div><div class="card">`;
       cats.forEach(c=>{
